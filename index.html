@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🚨 Chuông Khẩn Cấp</title>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <style>
+        * { box-sizing: border-box; }
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            text-align: center; 
+            background: #f4f4f9; 
+            color: #333;
+            margin: 0; padding: 20px;
+            display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 90vh;
+        }
+        .hidden { display: none !important; }
+        .card { background: white; padding: 30px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); max-width: 400px; width: 100%; }
+        
+        .btn { 
+            padding: 15px; font-size: 18px; margin: 10px 0; cursor: pointer; 
+            border-radius: 10px; border: none; background: #007bff; color: white; width: 100%; font-weight: bold; transition: 0.2s;
+        }
+        .btn:hover { background: #0056b3; }
+        
+        /* CSS cho Nút bấm khẩn cấp cực to */
+        .btn-danger { 
+            background: #dc3545; font-size: 30px; font-weight: bold; color: white;
+            width: 220px; height: 220px; border-radius: 50%; border: 8px solid #ff9ea7;
+            box-shadow: 0 10px 20px rgba(220, 53, 69, 0.5); cursor: pointer;
+            transition: transform 0.1s, box-shadow 0.1s; margin-top: 20px;
+            user-select: none; -webkit-user-select: none;
+        }
+        .btn-danger:active { transform: scale(0.9); box-shadow: 0 5px 10px rgba(220, 53, 69, 0.5); }
+        
+        input { 
+            padding: 15px; font-size: 20px; border-radius: 10px; border: 2px solid #ddd; 
+            width: 100%; text-align: center; margin-bottom: 15px; font-weight: bold;
+        }
+        #bell-id { font-size: 40px; color: #007bff; letter-spacing: 5px; margin: 10px 0; background: #e9ecef; border-radius: 10px; padding: 10px; }
+        
+        /* Hiệu ứng rung khi chuông kêu */
+        @keyframes shake {
+            0% { transform: translate(1px, 1px) rotate(0deg); }
+            10% { transform: translate(-1px, -2px) rotate(-1deg); }
+            20% { transform: translate(-3px, 0px) rotate(1deg); }
+            30% { transform: translate(3px, 2px) rotate(0deg); }
+            40% { transform: translate(1px, -1px) rotate(1deg); }
+            50% { transform: translate(-1px, 2px) rotate(-1deg); }
+            60% { transform: translate(-3px, 1px) rotate(0deg); }
+            70% { transform: translate(3px, 1px) rotate(-1deg); }
+            80% { transform: translate(-1px, -1px) rotate(1deg); }
+            90% { transform: translate(1px, 2px) rotate(0deg); }
+            100% { transform: translate(1px, -2px) rotate(-1deg); }
+        }
+        .ringing { animation: shake 0.5s; animation-iteration-count: infinite; color: red; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>🚨 SOS Bell</h1>
+
+        <div id="step1">
+            <h3>Chọn chức năng cho máy này:</h3>
+            <button class="btn" onclick="selectRole('bell')" style="background: #28a745;">🔔 Làm Máy Nhận (Chuông)</button>
+            <button class="btn" onclick="selectRole('button')" style="background: #dc3545;">🔴 Làm Máy Gửi (Nút bấm)</button>
+        </div>
+
+        <div id="bell-screen" class="hidden">
+            <h3>Mã kết nối của bạn:</h3>
+            <div id="bell-id">Đang tạo...</div>
+            <p>Nhập mã này vào máy bấm để kết nối nhé!</p>
+            <h2 id="ring-status" class="hidden ringing">🔔 ĐANG REO!!! 🔔</h2>
+        </div>
+
+        <div id="button-screen" class="hidden">
+            <div id="connect-section">
+                <h3>Nhập mã kết nối:</h3>
+                <input type="text" id="target-id" placeholder="VD: 12345" maxlength="5">
+                <button class="btn" onclick="connectToBell()">Kết Nối Ngay</button>
+                <p id="connect-status" style="color: #666;"></p>
+            </div>
+            
+            <div id="control-section" class="hidden">
+                <h3 style="color: #28a745;">✅ Đã kết nối thành công!</h3>
+                <p>Nhấn giữ để kêu, thả ra để tắt.</p>
+                <button class="btn-danger" 
+                    onmousedown="sendAction('ring_start')" onmouseup="sendAction('ring_stop')" onmouseleave="sendAction('ring_stop')"
+                    ontouchstart="sendAction('ring_start')" ontouchend="sendAction('ring_stop')">
+                    SOS
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <audio id="alarm-sound" src="https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg" loop preload="auto"></audio>
+
+    <script>
+        let peer = null;
+        let conn = null;
+        const prefix = "chuong-sos-khang-"; // Prefix ẩn để tránh trùng lặp ID trên server PeerJS
+        const sound = document.getElementById('alarm-sound');
+
+        // Hàm chuyển đổi màn hình
+        function selectRole(role) {
+            document.getElementById('step1').classList.add('hidden');
+            if (role === 'bell') {
+                document.getElementById('bell-screen').classList.remove('hidden');
+                setupBell();
+            } else {
+                document.getElementById('button-screen').classList.remove('hidden');
+                setupButton();
+            }
+        }
+
+        // --- CODE CHO MÁY CHUÔNG ---
+        function setupBell() {
+            // Tạo mã 5 chữ số ngẫu nhiên cho dễ nhớ
+            const randomCode = Math.floor(10000 + Math.random() * 90000).toString();
+            
+            // Khởi tạo PeerJS với ID tùy chỉnh
+            peer = new Peer(prefix + randomCode);
+
+            peer.on('open', function(id) {
+                document.getElementById('bell-id').innerText = randomCode;
+            });
+
+            peer.on('connection', function(connection) {
+                connection.on('data', function(data) {
+                    if (data === 'ring_start') {
+                        sound.play().catch(e => console.log("Lỗi tự động phát âm thanh:", e));
+                        document.getElementById('ring-status').classList.remove('hidden');
+                    } else if (data === 'ring_stop') {
+                        sound.pause();
+                        sound.currentTime = 0;
+                        document.getElementById('ring-status').classList.add('hidden');
+                    }
+                });
+            });
+            
+            peer.on('error', function(err) {
+                console.error("Lỗi PeerJS:", err);
+                alert("Có lỗi mạng, tải lại trang thử nha bạn!");
+            });
+        }
+
+        // --- CODE CHO MÁY BẤM NÚT ---
+        function setupButton() {
+            peer = new Peer(); // Máy gửi chỉ cần tạo Peer ảo, không cần ID cố định
+        }
+
+        function connectToBell() {
+            const targetCode = document.getElementById('target-id').value.trim();
+            const statusText = document.getElementById('connect-status');
+            
+            if (!targetCode) {
+                alert('Bạn chưa nhập mã kìa!');
+                return;
+            }
+            
+            statusText.innerText = "Đang kết nối...";
+            conn = peer.connect(prefix + targetCode);
+            
+            conn.on('open', function() {
+                document.getElementById('connect-section').classList.add('hidden');
+                document.getElementById('control-section').classList.remove('hidden');
+            });
+
+            conn.on('error', function(err) {
+                statusText.innerText = "Kết nối thất bại!";
+                alert("Không kết nối được! Kiểm tra lại xem mã đúng chưa và máy chuông đã bật chưa nhé.");
+            });
+        }
+
+        function sendAction(action) {
+            if (conn && conn.open) {
+                conn.send(action);
+            }
+        }
+    </script>
+</body>
+</html>
