@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chuông Khẩn Cấp - Hệ thống báo động Realtime</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @keyframes customPulse {
+            0%, 100% { opacity: 1; transform: scale(1.4); }
+            50% { opacity: .4; transform: scale(1.1); }
+        }
+        .animate-custom-pulse {
+            animation: customPulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        .d-none { display: none !important; }
+    </style>
+</head>
+<body id="app-body" class="min-h-screen flex flex-col font-sans bg-gray-900 text-white transition-colors duration-300">
+
+    <!-- 1. MÀN HÌNH TẢI (LOADING SCREEN) -->
+    <div id="view-loading" class="min-h-screen bg-gray-900 flex flex-col items-center justify-center text-white fixed inset-0 z-50">
+        <svg class="w-12 h-12 animate-spin text-red-500 mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1 1 21.306 7" />
+        </svg>
+        <p class="text-gray-400 text-sm animate-pulse">Đang khởi tạo kết nối an toàn...</p>
+    </div>
+
+    <!-- 2. GIAO DIỆN CẤU HÌNH FIREBASE (CHỈ HIỂN THỊ KHI CHƯA CÀI ĐẶT) -->
+    <div id="view-setup" class="min-h-screen bg-gray-950 flex items-center justify-center p-4 d-none">
+        <div class="w-full max-w-lg bg-gray-900 border border-gray-800 rounded-3xl p-6 md:p-8 shadow-2xl space-y-6">
+            <div class="text-center space-y-2">
+                <div class="inline-flex p-3 bg-red-500/10 text-red-500 rounded-2xl mb-2">
+                    <svg class="w-8 h-8" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                </div>
+                <h2 class="text-2xl font-bold">Cần cấu hình Firebase</h2>
+                <p class="text-gray-400 text-sm">Chào mừng bạn! Để hệ thống chuông báo hoạt động realtime giữa các thiết bị, bạn cần liên kết với một project Firebase của riêng mình.</p>
+            </div>
+
+            <div class="space-y-4">
+                <div class="bg-gray-950/60 p-4 rounded-2xl border border-gray-800 space-y-2 text-xs text-gray-400">
+                    <p class="font-semibold text-gray-200">Các bước thực hiện cực kỳ đơn giản:</p>
+                    <ol class="list-decimal pl-4 space-y-1">
+                        <li>Vào trang <a href="https://console.firebase.google.com/" target="_blank" class="text-blue-400 underline">Firebase Console</a> và tạo 1 Project.</li>
+                        <li>Tạo ứng dụng Web mới để lấy đoạn <span class="font-mono text-yellow-500">firebaseConfig</span>.</li>
+                        <li>Bật tính năng <strong>Anonymous Sign-In</strong> trong mục Authentication.</li>
+                        <li>Tạo cơ sở dữ liệu <strong>Cloud Firestore</strong> (chọn Test Mode).</li>
+                    </ol>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-semibold mb-2 text-gray-300">Dán đoạn cấu hình Firebase (JSON hoặc Javascript Object):</label>
+                    <textarea id="setup-config-input" rows="8" placeholder='{&#10;  "apiKey": "AIzaSy...",&#10;  "authDomain": "app.firebaseapp.com",&#10;  "projectId": "app-id",&#10;  "storageBucket": "app.appspot.com",&#10;  "messagingSenderId": "...",&#10;  "appId": "..."&#10;}' class="w-full font-mono text-sm p-4 bg-gray-950 border border-gray-800 rounded-2xl focus:border-red-500 focus:outline-none transition-colors text-yellow-500 placeholder-gray-700"></textarea>
+                </div>
+            </div>
+
+            <button id="btn-save-config" class="w-full bg-red-600 hover:bg-red-500 active:scale-[0.99] text-white font-bold py-4 rounded-2xl transition-all shadow-lg shadow-red-600/20">
+                Lưu cấu hình và Khởi động
+            </button>
+        </div>
+    </div>
+
+    <!-- HEADER ỨNG DỤNG -->
+    <header id="app-header" class="p-4 flex items-center justify-between border-b border-gray-800 bg-gray-950/50 d-none">
+        <div class="flex items-center gap-2">
+            <svg class="text-red-500 w-6 h-6 animate-pulse" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+            <h1 class="font-extrabold text-lg tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-red-500 to-yellow-500">CHUÔNG KHẨN CẤP</h1>
+        </div>
+        <div class="flex items-center gap-2">
+            <button id="btn-reset-config" title="Cài đặt lại Firebase" class="p-2 hover:bg-gray-800 rounded-full text-gray-500 hover:text-gray-300 transition-colors">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+            </button>
+            <button id="btn-back" class="px-3 py-1.5 hover:bg-gray-800 rounded-xl transition-colors flex items-center gap-1 text-sm text-gray-400 d-none">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg> 
+                Quay lại
+            </button>
+        </div>
+    </header>
+
+    <!-- ERROR TOAST -->
+    <div id="error-toast" class="bg-red-500/10 border border-red-500 text-red-500 p-4 m-4 rounded-2xl flex items-center justify-between d-none transition-all">
+        <span id="error-message"></span>
+        <button id="btn-close-error" class="font-bold text-xl px-2 hover:opacity-80">&times;</button>
+    </div>
+
+    <!-- MAIN APP CONTENT -->
+    <main id="app-main" class="flex-1 flex flex-col items-center justify-center p-4 d-none">
+        
+        <!-- STATE: CHỌN VAI TRÒ -->
+        <div id="view-select" class="w-full max-w-md space-y-6">
+            <div class="text-center space-y-2 mb-8">
+                <h2 class="text-3xl font-extrabold tracking-tight">Chọn thiết bị của bạn</h2>
+                <p class="text-gray-400">Thiết bị này sẽ đóng vai trò gì trong hệ thống khẩn cấp?</p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <button id="btn-role-bell" class="group relative flex flex-col items-center justify-center p-6 bg-gray-800/60 hover:bg-gray-800 border-2 border-gray-700/60 hover:border-blue-500 rounded-3xl transition-all h-52 shadow-xl">
+                    <div class="p-4 bg-blue-500/10 rounded-2xl mb-4 group-hover:bg-blue-500/20 transition-colors">
+                        <svg class="w-10 h-10 text-blue-400 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+                    </div>
+                    <span class="font-bold text-lg">Làm Chuông</span>
+                    <p class="text-xs text-gray-400 mt-2 text-center">Để nhận tín hiệu và phát âm cảnh báo lớn.</p>
+                </button>
+
+                <button id="btn-role-button" class="group relative flex flex-col items-center justify-center p-6 bg-gray-800/60 hover:bg-gray-800 border-2 border-gray-700/60 hover:border-red-500 rounded-3xl transition-all h-52 shadow-xl">
+                    <div class="p-4 bg-red-500/10 rounded-2xl mb-4 group-hover:bg-red-500/20 transition-colors">
+                        <svg class="w-10 h-10 text-red-400 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 11c0 3.517-1.009 6.799-2.753 9.571m-3.44-2.04l.054-.09A13.916 13.916 0 009 11.541V12M12 11V9c0-1.1-.9-2-2-2a2 2 0 00-2 2v2m4-3V5a2 2 0 10-4 0v3m4 3H10m6 1.242c1.439.435 2.5 1.77 2.5 3.352v1.942M12 15h.01M16 18H8"/></svg>
+                    </div>
+                    <span class="font-bold text-lg">Làm Nút Bấm</span>
+                    <p class="text-xs text-gray-400 mt-2 text-center">Bấm để kích hoạt chuông reo từ xa.</p>
+                </button>
+            </div>
+        </div>
+
+        <!-- STATE: YÊU CẦU QUYỀN TRÌNH DUYỆT -->
+        <div id="view-bell-setup" class="w-full max-w-sm text-center space-y-6 d-none">
+            <div class="p-6 bg-gray-800 rounded-3xl border border-gray-700 shadow-xl space-y-4">
+                <svg class="w-16 h-16 mx-auto text-blue-400 animate-bounce" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"/></svg>
+                <h2 class="text-xl font-bold">Quyền phát âm thanh</h2>
+                <p class="text-sm text-gray-400">Trình duyệt yêu cầu bạn nhấp nút dưới đây trước để cấp quyền cho chuông phát tín hiệu báo động.</p>
+                <button id="btn-create-bell" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-2xl transition-all flex justify-center items-center gap-2 shadow-lg shadow-blue-500/20">
+                    <span class="btn-text">Kích hoạt & Tạo phòng chuông</span>
+                    <svg class="btn-spinner d-none animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/></svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- STATE: MÀN HÌNH CHUÔNG HOẠT ĐỘNG -->
+        <div id="view-bell-active" class="text-center flex flex-col items-center justify-center space-y-8 w-full max-w-md d-none">
+            
+            <div id="bell-icon-container" class="relative">
+                <div id="bell-glow" class="absolute inset-0 bg-red-500 blur-3xl opacity-20 rounded-full transition-all duration-300"></div>
+                <svg id="bell-icon" class="w-40 h-40 relative z-10 text-blue-500 drop-shadow-2xl transition-colors duration-300" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+            </div>
+
+            <div class="bg-gray-800/80 backdrop-blur border border-gray-700/60 p-6 rounded-3xl w-full shadow-2xl relative z-20 space-y-6">
+                <div>
+                    <p class="text-gray-400 mb-1 uppercase text-xs font-bold tracking-widest">MÃ KẾT NỐI KHẨN CẤP</p>
+                    <div id="display-room-code" class="text-6xl font-black text-white tracking-[0.15em] select-all py-2 font-mono">0000</div>
+                </div>
+                
+                <div id="status-container" class="flex items-center justify-center gap-2 p-3.5 rounded-2xl font-medium transition-colors bg-gray-950/60 text-gray-400 border border-gray-800">
+                    <span id="status-icon">
+                        <svg class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/></svg>
+                    </span>
+                    <span id="status-text">Đang chờ máy bấm kết nối...</span>
+                </div>
+            </div>
+            <h2 id="ringing-alert-text" class="text-4xl font-black text-white uppercase tracking-wider animate-pulse d-none">🚨 CÓ BÁO ĐỘNG KHẨN!</h2>
+        </div>
+
+        <!-- STATE: NHẬP MÃ KẾT NỐI -->
+        <div id="view-button-join" class="w-full max-w-sm space-y-6 d-none">
+            <div class="text-center space-y-2 mb-8">
+                <h2 class="text-3xl font-extrabold tracking-tight">Kết nối Chuông</h2>
+                <p class="text-gray-400 text-sm">Nhập mã hiển thị trên màn hình của thiết bị Chuông.</p>
+            </div>
+
+            <div class="bg-gray-800 p-6 rounded-3xl border border-gray-700 shadow-xl space-y-6">
+                <div>
+                    <input 
+                        id="input-join-code"
+                        type="text" 
+                        maxLength="4"
+                        placeholder="0000"
+                        class="w-full text-center text-5xl font-mono font-black tracking-[0.2em] bg-gray-950 border-2 border-gray-800 rounded-2xl py-6 focus:border-red-500 focus:outline-none transition-all text-white placeholder-gray-800"
+                    />
+                </div>
+                <button id="btn-join-room" disabled class="w-full bg-red-600 hover:bg-red-500 disabled:bg-gray-800 disabled:text-gray-600 text-white font-bold py-4 rounded-2xl text-lg transition-all flex justify-center items-center gap-2 shadow-lg shadow-red-600/10">
+                    <span class="btn-text">Kết nối ngay</span>
+                    <svg class="btn-spinner d-none animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/></svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- STATE: MÀN HÌNH NÚT BẤM HOẠT ĐỘNG -->
+        <div id="view-button-active" class="flex flex-col items-center justify-center w-full max-w-md h-full py-6 d-none">
+            <div class="text-center mb-10">
+                <span class="inline-flex items-center gap-2 bg-green-500/10 text-green-400 border border-green-500/20 px-4 py-2 rounded-full font-semibold text-sm">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    Đã liên kết với chuông: <span id="display-joined-code" class="font-mono font-bold text-white tracking-wide"></span>
+                </span>
+                <p class="text-gray-400 mt-4 text-sm">Nút bấm của bạn đã sẵn sàng hoạt động realtime.</p>
+            </div>
+
+            <!-- Nút bấm chuông khổng lồ -->
+            <button id="btn-press-bell" class="relative flex items-center justify-center w-64 h-64 rounded-full bg-red-600 hover:bg-red-500 active:bg-red-800 border-[14px] border-red-950/60 shadow-[0_0_80px_rgba(220,38,38,0.3)] active:shadow-[0_0_20px_rgba(220,38,38,0.7)] active:scale-95 transition-all duration-100">
+                <div class="absolute inset-0 rounded-full bg-gradient-to-b from-white/10 to-transparent pointer-events-none"></div>
+                <span class="font-black text-2xl uppercase tracking-wider text-white drop-shadow-lg z-10 flex flex-col items-center gap-3">
+                    <svg class="w-14 h-14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 13l-3 3m0 0l-3-3m3 3V8m0 13a9 9 0 110-18 9 9 0 010 18z"/></svg>
+                    BẤM CHUÔNG
+                </span>
+            </button>
+        </div>
+
+    </main>
+
+    <!-- CÁC THƯ VIỆN FIREBASE CHÍNH -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, onSnapshot, updateDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // ==========================================
+        //  CẤU HÌNH FIREBASE CỦA BẠN (TÙY CHỌN)
+        // ==========================================
+        // Bạn có thể dán trực tiếp đoạn config của bạn vào đây nếu muốn cố định nó cho tệp này.
+        // Nếu để trống, ứng dụng sẽ hiện màn hình cấu hình trực quan trên web khi chạy trên GitHub Pages.
+        let defaultFirebaseConfig = {
+            apiKey: "",
+            authDomain: "",
+            projectId: "",
+            storageBucket: "",
+            messagingSenderId: "",
+            appId: ""
+        };
+
+        // Ưu tiên lấy biến từ môi trường Sandbox hoặc localStorage
+        let activeFirebaseConfig = null;
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'chuong-khan-cap-global';
+
+        // State quản lý ứng dụng
+        let currentUser = null;
+        let currentRole = 'select';
+        let currentRoomCode = '';
+        let isConnected = false;
+        let isRinging = false;
+        let unsubscribeSnapshot = null;
+        let audioCtx = null;
+        let lastRingTime = 0;
+
+        // Tiện ích lấy nhanh Element
+        const el = (id) => document.getElementById(id);
+
+        // --- CÁC VIEW HIỂN THỊ ---
+        const viewLoading = el('view-loading');
+        const viewSetup = el('view-setup');
+        const viewSelect = el('view-select');
+        const viewBellSetup = el('view-bell-setup');
+        const viewBellActive = el('view-bell-active');
+        const viewButtonJoin = el('view-button-join');
+        const viewButtonActive = el('view-button-active');
+        const appHeader = el('app-header');
+        const appMain = el('app-main');
+        const btnBack = el('btn-back');
+        const errorToast = el('error-toast');
+        const errorMessage = el('error-message');
+        const inputJoinCode = el('input-join-code');
+        const btnJoinRoom = el('btn-join-room');
+
+        const allViews = [viewSelect, viewBellSetup, viewBellActive, viewButtonJoin, viewButtonActive];
+
+        // Tránh bị treo do cấu hình rỗng
+        function checkFirebaseConfig() {
+            // 1. Kiểm tra biến môi trường Sandbox
+            if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+                try {
+                    const sandboxConfig = JSON.parse(__firebase_config);
+                    if (sandboxConfig.apiKey) {
+                        activeFirebaseConfig = sandboxConfig;
+                        return true;
+                    }
+                } catch(e) {}
+            }
+
+            // 2. Kiểm tra biến mặc định được dán cứng trong tệp
+            if (defaultFirebaseConfig.apiKey) {
+                activeFirebaseConfig = defaultFirebaseConfig;
+                return true;
+            }
+
+            // 3. Kiểm tra biến đã lưu trong localStorage
+            const savedConfig = localStorage.getItem('bell_firebase_config_save');
+            if (savedConfig) {
+                try {
+                    const parsed = JSON.parse(savedConfig);
+                    if (parsed.apiKey) {
+                        activeFirebaseConfig = parsed;
+                        return true;
+                    }
+                } catch (e) {
+                    localStorage.removeItem('bell_firebase_config_save');
+                }
+            }
+
+            return false;
+        }
+
+        // --- CHUYỂN ĐỔI GIAO DIỆN MÀN HÌNH ---
+        function setView(role) {
+            currentRole = role;
+            allViews.forEach(v => v.classList.add('d-none'));
+            
+            if (role === 'select') viewSelect.classList.remove('d-none');
+            else if (role === 'bell_setup') viewBellSetup.classList.remove('d-none');
+            else if (role === 'bell_active') viewBellActive.classList.remove('d-none');
+            else if (role === 'button_join') viewButtonJoin.classList.remove('d-none');
+            else if (role === 'button_active') viewButtonActive.classList.remove('d-none');
+
+            if (role !== 'select') {
+                btnBack.classList.remove('d-none');
+            } else {
+                btnBack.classList.add('d-none');
+            }
+        }
+
+        function showError(msg) {
+            if (!msg) {
+                errorToast.classList.add('d-none');
+                return;
+            }
+            errorMessage.textContent = msg;
+            errorToast.classList.remove('d-none');
+        }
+
+        function setLoading(btnId, isLoading) {
+            const btn = el(btnId);
+            if (!btn) return;
+            const textEl = btn.querySelector('.btn-text');
+            const spinnerEl = btn.querySelector('.btn-spinner');
+            
+            btn.disabled = isLoading;
+            if (isLoading) {
+                textEl.classList.add('d-none');
+                spinnerEl.classList.remove('d-none');
+            } else {
+                textEl.classList.remove('d-none');
+                spinnerEl.classList.add('d-none');
+            }
+        }
+
+        // --- PHÁT ÂM THANH BÁO ĐỘNG ---
+        function triggerAlarmSound() {
+            if (isRinging) return;
+            isRinging = true;
+            updateRingingUI(true);
+            
+            try {
+                if (!audioCtx) {
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                if (audioCtx.state === 'suspended') {
+                    audioCtx.resume();
+                }
+
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                
+                osc.type = 'square';
+                const now = audioCtx.currentTime;
+                
+                // Hiệu ứng còi hú biến điệu tần số (Siren Effect)
+                osc.frequency.setValueAtTime(500, now);
+                osc.frequency.linearRampToValueAtTime(1100, now + 0.3);
+                osc.frequency.linearRampToValueAtTime(500, now + 0.6);
+                osc.frequency.linearRampToValueAtTime(1100, now + 0.9);
+                osc.frequency.linearRampToValueAtTime(500, now + 1.2);
+                osc.frequency.linearRampToValueAtTime(1100, now + 1.5);
+                osc.frequency.linearRampToValueAtTime(500, now + 1.8);
+                osc.frequency.linearRampToValueAtTime(1100, now + 2.1);
+
+                gain.gain.setValueAtTime(1, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 2.4);
+
+                osc.start(now);
+                osc.stop(now + 2.4);
+            } catch (e) {
+                console.error("Audio Context playback error:", e);
+            }
+
+            setTimeout(() => {
+                isRinging = false;
+                updateRingingUI(false);
+            }, 2400);
+        }
+
+        // --- CẬP NHẬT GIAO DIỆN KHI CHUÔNG REO ---
+        function updateRingingUI(ringing) {
+            const body = el('app-body');
+            const bellContainer = el('bell-icon-container');
+            const bellGlow = el('bell-glow');
+            const bellIcon = el('bell-icon');
+            const alertText = el('ringing-alert-text');
+            const pressBtn = el('btn-press-bell');
+
+            if (ringing) {
+                if (currentRole === 'bell_active') body.classList.replace('bg-gray-900', 'bg-red-600');
+                if (bellContainer) bellContainer.classList.add('animate-bounce');
+                if (bellGlow) {
+                    bellGlow.classList.replace('opacity-20', 'opacity-80');
+                    bellGlow.classList.add('scale-150', 'animate-custom-pulse');
+                }
+                if (bellIcon) {
+                    bellIcon.classList.replace('text-blue-500', 'text-white');
+                }
+                if (alertText) alertText.classList.remove('d-none');
+                if (pressBtn) {
+                    pressBtn.classList.add('scale-95', 'bg-red-800', 'border-red-950');
+                }
+            } else {
+                body.classList.replace('bg-red-600', 'bg-gray-900');
+                if (bellContainer) bellContainer.classList.remove('animate-bounce');
+                if (bellGlow) {
+                    bellGlow.classList.replace('opacity-80', 'opacity-20');
+                    bellGlow.classList.remove('scale-150', 'animate-custom-pulse');
+                }
+                if (bellIcon) {
+                    bellIcon.classList.replace('text-white', 'text-blue-500');
+                }
+                if (alertText) alertText.classList.add('d-none');
+                if (pressBtn) {
+                    pressBtn.classList.remove('scale-95', 'bg-red-800', 'border-red-950');
+                }
+            }
+        }
+
+        // --- CẬP NHẬT TRẠNG THÁI KẾT NỐI ---
+        function updateConnectionUI(connected) {
+            isConnected = connected;
+            const container = el('status-container');
+            const icon = el('status-icon');
+            const text = el('status-text');
+
+            if (connected) {
+                container.className = 'flex items-center justify-center gap-2 p-3.5 rounded-2xl font-semibold transition-colors bg-green-500/10 text-green-400 border border-green-500/20';
+                icon.innerHTML = `<svg class="w-5 h-5 text-green-400" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>`;
+                text.textContent = 'Đã kết nối với Máy Bấm!';
+            } else {
+                container.className = 'flex items-center justify-center gap-2 p-3.5 rounded-2xl font-semibold transition-colors bg-gray-950/60 text-gray-400 border border-gray-800';
+                icon.innerHTML = `<svg class="w-5 h-5 animate-spin text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/></svg>`;
+                text.textContent = 'Đang chờ máy bấm kết nối...';
+            }
+        }
+
+        // --- KHỞI CHẠY CHƯƠNG TRÌNH ---
+        function startApp(config) {
+            viewLoading.classList.remove('d-none');
+            viewSetup.classList.add('d-none');
+
+            try {
+                const app = initializeApp(config);
+                const auth = getAuth(app);
+                const db = getFirestore(app);
+
+                // Auth
+                const initAuth = async () => {
+                    try {
+                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                            await signInWithCustomToken(auth, __initial_auth_token);
+                        } else {
+                            await signInAnonymously(auth);
+                        }
+                    } catch (err) {
+                        console.error("Auth Error:", err);
+                        showError("Khởi tạo ẩn danh thất bại. Hãy chắc chắn bạn đã bật Anonymous Sign-In trên Firebase Console.");
+                        viewLoading.classList.add('d-none');
+                    }
+                };
+
+                initAuth();
+
+                onAuthStateChanged(auth, (user) => {
+                    currentUser = user;
+                    if (user) {
+                        // Kích hoạt giao diện chính
+                        viewLoading.classList.add('d-none');
+                        appHeader.classList.remove('d-none');
+                        appMain.classList.remove('d-none');
+                        setView('select');
+                    }
+                });
+
+                // Gán sự kiện cho các nút điều hướng chính
+                setupBusinessLogic(db);
+
+            } catch (err) {
+                console.error("Firebase init error:", err);
+                viewLoading.classList.add('d-none');
+                localStorage.removeItem('bell_firebase_config_save');
+                alert("Lỗi khởi tạo cấu hình Firebase: " + err.message + ". Vui lòng thiết lập lại.");
+                window.location.reload();
+            }
+        }
+
+        // --- TOÀN BỘ LOGIC NGHIỆP VỤ (CHẠY SAU KHI FIREBASE OK) ---
+        function setupBusinessLogic(db) {
+            
+            // Xử lý nút quay lại
+            btnBack.onclick = () => {
+                if (unsubscribeSnapshot) {
+                    unsubscribeSnapshot();
+                    unsubscribeSnapshot = null;
+                }
+                currentRoomCode = '';
+                isConnected = false;
+                showError('');
+                setView('select');
+            };
+
+            // Thiết lập vai trò
+            el('btn-role-bell').onclick = () => setView('bell_setup');
+            el('btn-role-button').onclick = () => setView('button_join');
+
+            // Tạo phòng chuông báo
+            el('btn-create-bell').onclick = async () => {
+                setLoading('btn-create-bell', true);
+                showError('');
+                try {
+                    // Khởi tạo trước AudioContext để không bị trình duyệt chặn tiếng sau này
+                    if (!audioCtx) {
+                        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                    }
+                    if (audioCtx.state === 'suspended') {
+                        audioCtx.resume();
+                    }
+
+                    // Thử phát thử 1 âm tần số cực ngắn không tiếng để đăng ký Audio Context
+                    const dummyOsc = audioCtx.createOscillator();
+                    const dummyGain = audioCtx.createGain();
+                    dummyGain.gain.value = 0.001; // Cực nhỏ
+                    dummyOsc.connect(dummyGain);
+                    dummyGain.connect(audioCtx.destination);
+                    dummyOsc.start();
+                    dummyOsc.stop(audioCtx.currentTime + 0.1);
+
+                    const newCode = Math.floor(1000 + Math.random() * 9000).toString();
+                    const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'emergency_bells', newCode);
+                    
+                    await setDoc(roomRef, {
+                        code: newCode,
+                        connected: false,
+                        ringing: 0,
+                        createdAt: Date.now(),
+                        hostId: currentUser.uid
+                    });
+
+                    currentRoomCode = newCode;
+                    el('display-room-code').textContent = newCode;
+                    updateConnectionUI(false);
+                    setView('bell_active');
+
+                    // Lắng nghe sự kiện Realtime phòng
+                    unsubscribeSnapshot = onSnapshot(roomRef, (docSnap) => {
+                        if (docSnap.exists()) {
+                            const data = docSnap.data();
+                            
+                            if (data.connected !== isConnected) {
+                                updateConnectionUI(data.connected);
+                            }
+
+                            if (data.ringing > lastRingTime) {
+                                lastRingTime = data.ringing;
+                                triggerAlarmSound();
+                            }
+                        }
+                    }, (err) => {
+                        console.error(err);
+                        showError("Mất kết nối với máy chủ.");
+                    });
+
+                } catch (err) {
+                    console.error(err);
+                    showError("Không thể kích hoạt chuông. Kiểm tra phân quyền Firestore Database của bạn (Rule đọc/ghi).");
+                } finally {
+                    setLoading('btn-create-bell', false);
+                }
+            };
+
+            // Kiểm soát việc nhập mã phòng
+            inputJoinCode.oninput = (e) => {
+                let val = e.target.value.replace(/\D/g, '');
+                e.target.value = val;
+                btnJoinRoom.disabled = val.length !== 4;
+            };
+
+            // Tham gia phòng chuông
+            btnJoinRoom.onclick = async () => {
+                const code = inputJoinCode.value;
+                if (code.length !== 4) return;
+                
+                setLoading('btn-join-room', true);
+                showError('');
+
+                try {
+                    const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'emergency_bells', code);
+                    const docSnap = await getDoc(roomRef);
+
+                    if (docSnap.exists()) {
+                        await updateDoc(roomRef, { connected: true });
+                        currentRoomCode = code;
+                        el('display-joined-code').textContent = code;
+                        setView('button_active');
+                    } else {
+                        showError("Mã kết nối không chính xác hoặc phòng chuông đã tắt.");
+                    }
+                } catch (err) {
+                    console.error(err);
+                    showError("Không thể liên kết chuông. Vui lòng kiểm tra lại mạng.");
+                } finally {
+                    setLoading('btn-join-room', false);
+                }
+            };
+
+            // Hành động Bấm chuông khẩn cấp
+            el('btn-press-bell').onclick = async () => {
+                if (!currentRoomCode) return;
+                try {
+                    const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'emergency_bells', currentRoomCode);
+                    await updateDoc(roomRef, { ringing: Date.now() });
+                    
+                    // Phản hồi rung tại chỗ của người bấm
+                    isRinging = true;
+                    updateRingingUI(true);
+                    setTimeout(() => {
+                        isRinging = false;
+                        updateRingingUI(false);
+                    }, 500);
+                } catch (err) {
+                    console.error(err);
+                    showError("Lỗi kết nối! Không thể truyền tín hiệu báo động.");
+                }
+            };
+        }
+
+        // --- KHỞI ĐỘNG KIỂM TRA ĐẦU VÀO ---
+        window.addEventListener('DOMContentLoaded', () => {
+            
+            // Xử lý đóng thông báo lỗi
+            el('btn-close-error').onclick = () => showError('');
+
+            // Cấu hình lại Firebase từ đầu
+            el('btn-reset-config').onclick = () => {
+                if (confirm("Bạn có chắc chắn muốn cài đặt lại cấu hình Firebase khác?")) {
+                    localStorage.removeItem('bell_firebase_config_save');
+                    window.location.reload();
+                }
+            };
+
+            // Nếu chưa có Firebase config, hướng dẫn người dùng thiết lập
+            if (!checkFirebaseConfig()) {
+                viewLoading.classList.add('d-none');
+                viewSetup.classList.remove('d-none');
+
+                // Lưu cấu hình
+                el('btn-save-config').onclick = () => {
+                    const rawInput = el('setup-config-input').value.trim();
+                    if (!rawInput) {
+                        alert("Vui lòng dán chuỗi cấu hình Firebase!");
+                        return;
+                    }
+
+                    try {
+                        let parsedConfig = null;
+                        
+                        // Hỗ trợ cả Javascript Object dán trực tiếp lẫn JSON chuẩn
+                        if (rawInput.includes("apiKey") && !rawInput.startsWith("{")) {
+                            // Chuyển đối tượng lỏng lẻo thành JSON có thể phân tích được
+                            const formatted = rawInput
+                                .replace(/([{,]\s*)([a-zA-Z0-9_]+)\s*:/g, '$1"$2":') // Thêm nháy kép cho các thuộc tính keys
+                                .replace(/'/g, '"') // Chuyển nháy đơn sang nháy kép
+                                .replace(/,(\s*[\]}])/g, '$1'); // Xoá dấu phẩy thừa cuối mảng/đối tượng
+                            parsedConfig = JSON.parse(formatted);
+                        } else {
+                            parsedConfig = JSON.parse(rawInput);
+                        }
+
+                        if (!parsedConfig.apiKey || !parsedConfig.projectId) {
+                            throw new Error("Cấu hình thiếu thông tin apiKey hoặc projectId quan trọng.");
+                        }
+
+                        localStorage.setItem('bell_firebase_config_save', JSON.stringify(parsedConfig));
+                        window.location.reload();
+
+                    } catch (e) {
+                        alert("Định dạng chuỗi không hợp lệ. Hãy kiểm tra lại dấu ngoặc nhọn hoặc dấu nháy kép của các trường. Chi tiết lỗi: " + e.message);
+                    }
+                };
+            } else {
+                // Khởi động trực tiếp ứng dụng với cấu hình hợp lệ
+                startApp(activeFirebaseConfig);
+            }
+        });
+
+    </script>
+</body>
+</html>
