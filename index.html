@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>🚨 Chuông Khẩn Cấp Mobile</title>
+    <title>🚨 Chuông Khẩn Cấp - Siêu To</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         * { 
             box-sizing: border-box; 
-            -webkit-tap-highlight-color: transparent; /* Tắt vệt màu xanh khi chạm trên iOS */
+            -webkit-tap-highlight-color: transparent;
         }
         body { 
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
@@ -17,7 +17,7 @@
             color: #333;
             margin: 0; padding: 20px;
             display: flex; flex-direction: column; align-items: center; justify-content: center; 
-            min-height: 100dvh; /* Tối ưu chiều cao cho trình duyệt di động */
+            min-height: 100dvh;
         }
         .hidden { display: none !important; }
         .card { background: white; padding: 30px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.08); max-width: 400px; width: 100%; }
@@ -28,7 +28,6 @@
         }
         .btn:hover { opacity: 0.9; }
         
-        /* Nút bấm SOS dạng Click-to-Toggle cho Mobile/iPad */
         .btn-sos { 
             background: #dc3545; font-size: 32px; font-weight: bold; color: white;
             width: 200px; height: 200px; border-radius: 50%; border: 8px solid #ff9ea7;
@@ -37,7 +36,6 @@
             display: flex; align-items: center; justify-content: center;
             user-select: none; -webkit-user-select: none;
         }
-        /* Khi chuông đang reo, nút bấm chuyển màu xanh lá để nhấn tắt */
         .btn-sos.active-ring {
             background: #28a745; border-color: #a3e6b5;
             box-shadow: 0 10px 25px rgba(40, 167, 69, 0.4);
@@ -50,14 +48,12 @@
         }
         #bell-id { font-size: 42px; color: #007bff; letter-spacing: 5px; margin: 15px 0; background: #e9ecef; border-radius: 12px; padding: 12px; font-weight: bold; }
         
-        /* Hiệu ứng nhấp nháy cho nút bấm khi đang reo */
         @keyframes pulse {
             0% { transform: scale(1); }
             50% { transform: scale(1.05); }
             100% { transform: scale(1); }
         }
 
-        /* Hiệu ứng rung màn hình cho Máy Chuông */
         @keyframes shake {
             0% { transform: translate(1px, 1px) rotate(0deg); }
             10% { transform: translate(-1px, -2px) rotate(-1deg); }
@@ -84,15 +80,15 @@
 
         <div id="bell-screen" class="hidden">
             <div id="audio-unlock-section">
-                <p style="color: #666;">Để chuông có thể kêu trên iPad/iPhone, vui lòng bấm nút bên dưới:</p>
-                <button class="btn" onclick="unlockAudioAndSetup()" style="background: #ffc107; color: #212529;">🔓 Kích Hoạt Hệ Thống Âm Thanh</button>
+                <p style="color: #666;">Bấm nút dưới để kích hoạt hệ thống loa công suất lớn:</p>
+                <button class="btn" onclick="unlockAudioAndSetup()" style="background: #ffc107; color: #212529;">🔊 KÍCH HOẠT LOA (MAX VOL)</button>
             </div>
             
             <div id="bell-info-section" class="hidden">
                 <h3>Mã kết nối của bạn:</h3>
                 <div id="bell-id">Đang tạo...</div>
                 <p>Nhập mã này vào máy bấm để kết nối nhé!</p>
-                <h2 id="ring-status" class="hidden ringing">🔔 ĐANG REO!!! 🔔</h2>
+                <h2 id="ring-status" class="hidden ringing">🚨 ĐANG REO TO!!! 🚨</h2>
             </div>
         </div>
 
@@ -115,14 +111,19 @@
         </div>
     </div>
 
-    <audio id="alarm-sound" src="https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg" loop preload="auto"></audio>
+    <audio id="alarm-sound" src="https://actions.google.com/sounds/v1/alarms/industrial_alarm_loop.ogg" loop preload="auto" crossorigin="anonymous"></audio>
 
     <script>
         let peer = null;
         let conn = null;
-        let isRinging = false; // Trạng thái chuông cho máy bấm
+        let isRinging = false;
         const prefix = "chuong-sos-khang-"; 
         const sound = document.getElementById('alarm-sound');
+        
+        // Biến phục vụ khuếch đại âm thanh
+        let audioCtx = null;
+        let gainNode = null;
+        let source = null;
 
         function selectRole(role) {
             document.getElementById('step1').classList.add('hidden');
@@ -134,15 +135,36 @@
             }
         }
 
-        // --- XỬ LÝ MÁY CHUÔNG (Nhận tín hiệu) ---
+        // --- XỬ LÝ MÁY CHUÔNG ---
         function unlockAudioAndSetup() {
-            // Mẹo kích hoạt Audio ẩn trên iOS bằng tương tác thật của người dùng
+            // Khởi tạo hệ thống kích âm thanh (Web Audio API)
+            try {
+                if (!audioCtx) {
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                    gainNode = audioCtx.createGain();
+                    source = audioCtx.createMediaElementSource(sound);
+                    
+                    // KHUẾCH ĐẠI: Thay đổi số này để chỉnh độ to (3.0 tức là to gấp 3 lần bình thường)
+                    gainNode.gain.value = 3.0; 
+                    
+                    // Kết nối luồng âm thanh qua bộ kích trước khi ra loa
+                    source.connect(gainNode);
+                    gainNode.connect(audioCtx.destination);
+                }
+                
+                if (audioCtx.state === 'suspended') {
+                    audioCtx.resume();
+                }
+            } catch (e) {
+                console.log("Trình duyệt không hỗ trợ Web Audio API nâng cao, dùng loa mặc định.");
+            }
+
+            // Test âm thanh nhẹ để mở khóa quyền iOS
             sound.play().then(() => {
                 sound.pause();
                 sound.currentTime = 0;
             }).catch(e => console.log("Audio Unlocked"));
 
-            // Ẩn nút kích hoạt âm thanh, hiện màn hình lấy mã kết nối
             document.getElementById('audio-unlock-section').classList.add('hidden');
             document.getElementById('bell-info-section').classList.remove('hidden');
             
@@ -160,7 +182,10 @@
             peer.on('connection', function(connection) {
                 connection.on('data', function(data) {
                     if (data === 'ring_start') {
-                        sound.play().catch(e => alert("Vui lòng chạm vào màn hình chuông để cho phép phát âm thanh!"));
+                        if (audioCtx && audioCtx.state === 'suspended') {
+                            audioCtx.resume();
+                        }
+                        sound.play().catch(e => alert("Hãy bấm vào màn hình chuông một lần để cấp quyền phát âm thanh!"));
                         document.getElementById('ring-status').classList.remove('hidden');
                     } else if (data === 'ring_stop') {
                         sound.pause();
@@ -171,7 +196,7 @@
             });
         }
 
-        // --- XỬ LÝ MÁY BẤM NÚT (Gửi tín hiệu) ---
+        // --- XỬ LÝ MÁY BẤM NÚT ---
         function setupButton() {
             peer = new Peer(); 
         }
@@ -195,16 +220,15 @@
 
             conn.on('error', function(err) {
                 statusText.innerText = "Kết nối thất bại!";
-                alert("Không kết nối được! Hãy kiểm tra mã hoặc đảm bảo Máy Chuông đã kích hoạt.");
+                alert("Không kết nối được! Hãy kiểm tra mã hoặc đảm bảo Máy Chuông đã bật.");
             });
         }
 
-        // Hàm xử lý khi bấm nút SOS trên Mobile/iPad (Không cần giữ)
         function toggleRing() {
             if (!conn || !conn.open) return;
 
             const sosBtn = document.getElementById('sos-btn');
-            isRinging = !isRinging; // Đảo trạng thái reo chuông
+            isRinging = !isRinging;
 
             if (isRinging) {
                 conn.send('ring_start');
